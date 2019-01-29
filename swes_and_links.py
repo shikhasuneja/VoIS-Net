@@ -14,8 +14,7 @@ from ryu.lib.packet import ethernet
 
 from ryu.topology import event
 from ryu.topology.api import get_switch, get_link
-import sqlite3, re
-
+import sqlite3, re, time, copy
 
 class Topo_Discovery(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
@@ -38,13 +37,14 @@ class Topo_Discovery(app_manager.RyuApp):
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features_handler(self, ev):
         msg= ev.msg
+        """
         self.logger.info('OFPSwitchFeatures received: '
                          '\n\tdatapath_id=0x%016x n_buffers=%d '
                          '\n\tn_tables=%d auxiliary_id=%d '
                          '\n\tcapabilities=0x%08x',
                          msg.datapath_id, msg.n_buffers, msg.n_tables,
                          msg.auxiliary_id, msg.capabilities)
-
+        """
         datapath= ev.msg.datapath
         ofproto= datapath.ofproto
         parser= datapath.ofproto_parser
@@ -89,38 +89,39 @@ class Topo_Discovery(app_manager.RyuApp):
     Takes data structure with potentially duplicate entries and deletes redudant and duplicate
     entries. For example 2,1,1,1 and 1,2,1,1 or 2,1,1,1 and 2,1,1,1
     """
-    def non_duplicate(self):        
-        if len(self.final_topo_connections)== len(self.topo_connections)/2: 
-            if len(self.final_topo_connections)!=0:
-                return
+    def non_duplicate(self):
+        for element in self.topo_connections:
+            this_tuple= element
+            duplicate_tuple= ({'source_dpid': element[1]['dest_dpid']}, 
+                              {'dest_dpid': element[0]['source_dpid']}, 
+                              {'source_port': element[3]['dest_port']}, 
+                              {'dest_port': element[2]['source_port']})
+    
+            #First iteration
+            if len(self.final_topo_connections)== 0:
+                self.final_topo_connections.append(element)
+            
+            #If exact duplicate
+            elif this_tuple in self.final_topo_connections:
+                continue
+            
+            #If interchanged duplicate
+            elif duplicate_tuple in self.final_topo_connections:
+                continue
+            
+            #Invalid 
+            elif element[0]['source_dpid'] not in self.topo_switches or element[1]['dest_dpid'] not in self.topo_switches:
+                continue
+
+            #Non-duplicate and valid
+            else:
+                self.final_topo_connections.append(element)
+
+        #Also remove invalid topo_connections -> i.e. when switch not present
         
-        #To compare every element with every other element
-        for i in range(0,len(self.topo_connections)):
-            for j in range(0,len(self.topo_connections)):
-                
-                #For first iteration when final_topo_connections is empty, insert 
-                #first element directly
-                if len(self.final_topo_connections)== 0:
-                    self.final_topo_connections.append(self.topo_connections[i])
-                    continue
-                
-                #If source dpid of first element is equal to dest dpid of second element
-                #or vice versa
-                #Do not insert because this is redudant
-                elif self.topo_connections[i][0]['source_dpid']== self.topo_connections[j][1]['dest_dpid'] and self.topo_connections[i][1]['dest_dpid']== self.topo_connections[j][0]['source_dpid']:
-                    continue
-                
-                #If element already exists
-                #Do not insert because this is duplicate
-                elif self.topo_connections[j] in self.final_topo_connections:
-                    continue 
-
-                #Else insert second element which was just compared to first element and
-                #found to be neither redundant nor duplicate 
-                else:
-                    self.final_topo_connections.append(self.topo_connections[j])
-
-
+        
+        
+        
     #Add switches to db - non-unique with one switch dpid per row
     def add_swes_to_db(self):
         conn= sqlite3.connect('topology.db')
@@ -179,9 +180,10 @@ class Topo_Discovery(app_manager.RyuApp):
             for row in rows:
                 #If duplicate entry with just switches interchanged
                 if (self.dest_dpid==row[0] and self.source_dpid==row[1]):
+                    #Means unchanged topo, just duplicate with switches interchanged
                     if self.dest_port== row[2] and self.source_port== row[3]:
-                        #Means unchanged topo, just duplicate with switches interchanged
                         continue
+
                     #Switches interchanged, sure, but topo has also changed because ports have changed
                     else:
                         insert_command="INSERT OR REPLACE INTO topo_connections (source_dpid, dest_dpid, source_port, dest_port) values(?,?,?,?)"
@@ -253,10 +255,12 @@ class Topo_Discovery(app_manager.RyuApp):
     """
     @set_ev_cls(event.EventSwitchEnter)
     def handler_switch_enter(self, ev):
-        #The Function get_switch(self, None) outputs the list of switches.
-        
+        time.sleep(2)
+        #The Function get_switch(self, None) outputs the list of switches.        
         #Raw info
-        self.topo_raw_switches= get_switch(self, None)
+        self.topo_raw_switches= copy.copy(get_switch(self, None))
+        self.topo_raw_links= copy.copy(get_link(self, None))
+        
         #List with switch dpids as list elements
         self.topo_switches= [switch.dp.id for switch in self.topo_raw_switches]
         print("Switches")
@@ -264,9 +268,6 @@ class Topo_Discovery(app_manager.RyuApp):
         
         #Add switch info to db
         self.add_swes_to_db()
-        
-        
-        self.topo_raw_links= get_link(self, None)
         
         #List of tuple of dictionaries
         #Each list element is a tuple element describing each link
@@ -281,6 +282,10 @@ class Topo_Discovery(app_manager.RyuApp):
         #Remove duplicate and redundant elements
         self.non_duplicate()
         
+        self.final_topo_connections= [i for i in self.final_topo_connections 
+                                 if i[0]['source_dpid'] in self.topo_switches 
+                                 and i[1]['dest_dpid'] in self.topo_switches]
+        
         print("Non-duplicate connections:")
         print(self.final_topo_connections) 
         
@@ -294,7 +299,7 @@ class Topo_Discovery(app_manager.RyuApp):
     def handler_switch_leave(self, ev):
         
         self.logger.info("Not tracking switch; switch left.")
-        dpid= re.findall(r'\d+', str(ev))[0]
+        dpid= int(re.findall(r'\d+', str(ev))[0])
         print("Switch {} left topology".format(dpid))
 
         conn= sqlite3.connect('topology.db')
@@ -304,7 +309,7 @@ class Topo_Discovery(app_manager.RyuApp):
         delete_command="DELETE FROM switches WHERE switch_dpid={}".format(dpid)
         c.execute(delete_command)
 
-        #Delete switch from TABLE switch
+        #Delete switch-details from TABLE topo_connections
         delete_command="DELETE FROM topo_connections WHERE source_dpid={}".format(dpid)
         c.execute(delete_command)
         
@@ -313,5 +318,16 @@ class Topo_Discovery(app_manager.RyuApp):
         
         conn.commit()
         conn.close()
+        
+        
+        self.topo_connections= [i for i in self.topo_connections 
+                                 if not dpid== i[0]['source_dpid'] or dpid== i[1]['dest_dpid']]
+        
+        #Delete switch-details from data structure self.final_topo_connections     
+        self.final_topo_connections= [i for i in self.final_topo_connections 
+                                 if not dpid== i[0]['source_dpid'] or dpid== i[1]['dest_dpid']]
 
+        
+        
             
+
