@@ -37,14 +37,6 @@ class Topo_Discovery(app_manager.RyuApp):
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features_handler(self, ev):
         msg= ev.msg
-        """
-        self.logger.info('OFPSwitchFeatures received: '
-                         '\n\tdatapath_id=0x%016x n_buffers=%d '
-                         '\n\tn_tables=%d auxiliary_id=%d '
-                         '\n\tcapabilities=0x%08x',
-                         msg.datapath_id, msg.n_buffers, msg.n_tables,
-                         msg.auxiliary_id, msg.capabilities)
-        """
         datapath= ev.msg.datapath
         ofproto= datapath.ofproto
         parser= datapath.ofproto_parser
@@ -53,22 +45,7 @@ class Topo_Discovery(app_manager.RyuApp):
                                           ofproto.OFPCML_NO_BUFFER)]
         self.add_flow(datapath, 0, match, actions)
 
-    
-    #We are not using this function
-    def delete_flow(self, datapath):
-        ofproto= datapath.ofproto
-        parser= datapath.ofproto_parser
 
-        for dst in self.mac_to_port[datapath.id].keys():
-            match= parser.OFPMatch(eth_dst=dst)
-            mod= parser.OFPFlowMod(
-                datapath, command=ofproto.OFPFC_DELETE,
-                out_port=ofproto.OFPP_ANY, out_group=ofproto.OFPG_ANY,
-                priority=1, match=match)
-            datapath.send_msg(mod)
-
-    
-    
     def add_flow(self, datapath, priority, match, actions, buffer_id=None):
         ofproto= datapath.ofproto
         parser= datapath.ofproto_parser
@@ -109,7 +86,7 @@ class Topo_Discovery(app_manager.RyuApp):
             elif duplicate_tuple in self.final_topo_connections:
                 continue
             
-            #Invalid 
+            #Invalid topo_connection -> when switch not in topo_switches
             elif element[0]['source_dpid'] not in self.topo_switches or element[1]['dest_dpid'] not in self.topo_switches:
                 continue
 
@@ -117,11 +94,7 @@ class Topo_Discovery(app_manager.RyuApp):
             else:
                 self.final_topo_connections.append(element)
 
-        #Also remove invalid topo_connections -> i.e. when switch not present
-        
-        
-        
-        
+
     #Add switches to db - non-unique with one switch dpid per row
     def add_swes_to_db(self):
         conn= sqlite3.connect('topology.db')
@@ -129,8 +102,7 @@ class Topo_Discovery(app_manager.RyuApp):
         
         c.execute('''CREATE TABLE IF NOT EXISTS switches 
                 (switch_dpid int, UNIQUE(switch_dpid))''')
-        
-        
+                
         for i in range(0,len(self.topo_switches)):
             self.switch_dpid=self.topo_switches[i]
             insert_command="INSERT OR REPLACE INTO switches (switch_dpid) values(?)"
@@ -141,7 +113,6 @@ class Topo_Discovery(app_manager.RyuApp):
         conn.close()
 
 
-    
     """
     Add topo connections to db
     which is all link information (non-duplicate) in the whole topology
@@ -168,7 +139,7 @@ class Topo_Discovery(app_manager.RyuApp):
             
             #Read from existing table
             rows=c.fetchall()
-            
+                        
             if len(rows)==0:
                 #If not duplicate
                 #Insert or replace to ensure topology updation takes place and 
@@ -189,12 +160,10 @@ class Topo_Discovery(app_manager.RyuApp):
                         insert_command="INSERT OR REPLACE INTO topo_connections (source_dpid, dest_dpid, source_port, dest_port) values(?,?,?,?)"
                         t=(self.source_dpid, self.dest_dpid, self.source_port, self.dest_port, )
                         c.execute(insert_command, t)  
-        
         conn.commit()
         conn.close()
 
 
-    
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def _packet_in_handler(self, ev):
         if ev.msg.msg_len < ev.msg.total_len:
@@ -205,10 +174,8 @@ class Topo_Discovery(app_manager.RyuApp):
         ofproto= datapath.ofproto
         parser= datapath.ofproto_parser
         in_port= msg.match['in_port']
-
         pkt= packet.Packet(msg.data)
         eth= pkt.get_protocols(ethernet.ethernet)[0]
-
         dst= eth.dst
         src= eth.src
 
@@ -216,7 +183,6 @@ class Topo_Discovery(app_manager.RyuApp):
         self.mac_to_port.setdefault(dpid, {})
 
         #self.logger.info("\tpacket in %s %s %s %s", dpid, src, dst, in_port)
-
         #learn a mac address to avoid FLOOD next time.
         self.mac_to_port[dpid][src]= in_port
 
@@ -246,8 +212,6 @@ class Topo_Discovery(app_manager.RyuApp):
                                   in_port=in_port, actions=actions, data=data)
         datapath.send_msg(out)
 
-    
-    
 
     """
     The event EventSwitchEnter will trigger the activation of get_topology_data()
@@ -282,6 +246,7 @@ class Topo_Discovery(app_manager.RyuApp):
         #Remove duplicate and redundant elements
         self.non_duplicate()
         
+        #Delete invalid switch-details
         self.final_topo_connections= [i for i in self.final_topo_connections 
                                  if i[0]['source_dpid'] in self.topo_switches 
                                  and i[1]['dest_dpid'] in self.topo_switches]
@@ -292,7 +257,6 @@ class Topo_Discovery(app_manager.RyuApp):
         #Adding topo_connections to database i.e. the link information
         self.add_topo_con_to_db()
         
-
 
     #This event is fired when a switch leaves the topo. i.e. fails.
     @set_ev_cls(event.EventSwitchLeave, [MAIN_DISPATCHER, CONFIG_DISPATCHER, DEAD_DISPATCHER])
@@ -318,16 +282,10 @@ class Topo_Discovery(app_manager.RyuApp):
         
         conn.commit()
         conn.close()
-        
-        
+                
         self.topo_connections= [i for i in self.topo_connections 
                                  if not dpid== i[0]['source_dpid'] or dpid== i[1]['dest_dpid']]
         
         #Delete switch-details from data structure self.final_topo_connections     
         self.final_topo_connections= [i for i in self.final_topo_connections 
                                  if not dpid== i[0]['source_dpid'] or dpid== i[1]['dest_dpid']]
-
-        
-        
-            
-
