@@ -43,8 +43,8 @@ def draw_topology(switches, links):
     set_edge_labels(G, pos, src_ports, 0.2)
     dst_ports = get_edge_labels(G, 'dst_port')
     set_edge_labels(G, pos, dst_ports, 0.8)
-    plt.show()
-    #plt.savefig(TOPOLOGY_IMAGE)
+    #plt.show()
+    plt.savefig(TOPOLOGY_IMAGE)
 
 if __name__ == "__main__":
     switches, links = get_topo_details()
