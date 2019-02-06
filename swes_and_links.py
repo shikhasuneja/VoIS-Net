@@ -13,7 +13,7 @@ from ryu.lib.packet import packet
 from ryu.lib.packet import ethernet
 from ryu.topology import event
 from ryu.topology.api import get_switch, get_link
-import sqlite3, re, time, copy
+import sqlite3, re, calendar, time, copy
 
 class Topo_Discovery(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
@@ -21,6 +21,7 @@ class Topo_Discovery(app_manager.RyuApp):
         super(Topo_Discovery, self).__init__(*args, **kwargs)
         #Used for learning switch functioning
         self.mac_to_port= {}
+        self.last_updated= calendar.timegm(time.gmtime())
         """
         Used to store whole topology information (unique and non-duplicate values)
         This will be a list of tuples
@@ -117,7 +118,7 @@ class Topo_Discovery(app_manager.RyuApp):
         two switches
         """
         c.execute('''CREATE TABLE IF NOT EXISTS topo_connections 
-                (source_dpid int, dest_dpid int, source_port int, dest_port int, UNIQUE(source_dpid, dest_dpid))''')
+                (source_dpid int, dest_dpid int, source_port int, dest_port int, status text, UNIQUE(source_dpid, dest_dpid))''')
         
         for i in range(0,len(self.final_topo_connections)):
             self.source_dpid= self.final_topo_connections[i][0]['source_dpid']
@@ -126,28 +127,40 @@ class Topo_Discovery(app_manager.RyuApp):
             self.dest_port= self.final_topo_connections[i][3]['dest_port']
             
             #Read from existing table
+            query="SELECT * from topo_connections"
+            c.execute(query)
             rows=c.fetchall()
-                        
-            if len(rows)==0:
+          
+            if len(rows)== 0:
                 #If not duplicate
                 #Insert or replace to ensure topology updation takes place and 
                 #duplicate entries are not created
-                insert_command="INSERT OR REPLACE INTO topo_connections (source_dpid, dest_dpid, source_port, dest_port) values(?,?,?,?)"
-                t=(self.source_dpid, self.dest_dpid, self.source_port, self.dest_port, )
+                status="UP"
+                insert_command="INSERT OR REPLACE INTO topo_connections (source_dpid, dest_dpid, source_port, dest_port, status) values(?,?,?,?,?)"
+                t=(self.source_dpid, self.dest_dpid, self.source_port, self.dest_port, status, )
                 c.execute(insert_command, t)
             
-            for row in rows:
-                #If duplicate entry with just switches interchanged
-                if (self.dest_dpid==row[0] and self.source_dpid==row[1]):
-                    #Means unchanged topo, just duplicate with switches interchanged
-                    if self.dest_port== row[2] and self.source_port== row[3]:
-                        continue
-
-                    #Switches interchanged, sure, but topo has also changed because ports have changed
+            else:
+                for row in rows:
+                    #If duplicate entry with just switches interchanged
+                    if (self.dest_dpid==row[0] and self.source_dpid==row[1]):
+                        #Means unchanged topo, just duplicate with switches interchanged
+                        if self.dest_port== row[2] and self.source_port== row[3]:
+                            continue
+    
+                        #Switches interchanged, sure, but topo has also changed because ports have changed
+                        else:
+                            status="UP"
+                            insert_command="INSERT OR REPLACE INTO topo_connections (source_dpid, dest_dpid, source_port, dest_port, status) values(?,?,?,?,?)"
+                            t=(self.source_dpid, self.dest_dpid, self.source_port, self.dest_port, status, )
+                            c.execute(insert_command, t)  
+                    
                     else:
-                        insert_command="INSERT OR REPLACE INTO topo_connections (source_dpid, dest_dpid, source_port, dest_port) values(?,?,?,?)"
-                        t=(self.source_dpid, self.dest_dpid, self.source_port, self.dest_port, )
+                        status="UP"
+                        insert_command="INSERT OR REPLACE INTO topo_connections (source_dpid, dest_dpid, source_port, dest_port, status) values(?,?,?,?,?)"
+                        t=(self.source_dpid, self.dest_dpid, self.source_port, self.dest_port, status, )
                         c.execute(insert_command, t)  
+                        
         conn.commit()
         conn.close()
 
@@ -265,3 +278,70 @@ class Topo_Discovery(app_manager.RyuApp):
         #Delete switch-details from data structure self.final_topo_connections     
         self.final_topo_connections= [i for i in self.final_topo_connections 
                                  if not dpid== i[0]['source_dpid'] or dpid== i[1]['dest_dpid']]
+   
+
+    @set_ev_cls(ofp_event.EventOFPPortStatus, MAIN_DISPATCHER)
+    def _port_status_handler(self, ev):
+        #self.last_updated= calendar.timegm(time.gmtime())
+        time_difference= calendar.timegm(time.gmtime()) -self.last_updated
+        self.last_updated= calendar.timegm(time.gmtime())
+        print("Difference is {}".format(time_difference))
+        
+        msg= ev.msg
+        reason = msg.reason
+        port_no = msg.desc.port_no
+        ofproto = msg.datapath.ofproto
+        
+        if reason == ofproto.OFPPR_ADD:
+            self.logger.info("port added %s", port_no)
+        
+        elif reason == ofproto.OFPPR_DELETE:
+            self.logger.info("port deleted %s", port_no)
+        
+        elif reason == ofproto.OFPPR_MODIFY:
+            
+            if time_difference<4:
+                return
+            
+            else:
+                time.sleep(2)
+                self.logger.info("switch {}, port modified {}".format(msg.datapath.id, port_no))
+                #print(type(msg.datapath.id))
+                #print(type(port_no))
+                #Open database
+                conn= sqlite3.connect('topology.db')
+                c= conn.cursor()    
+                
+                #Get switch and port row and check status
+                query="SELECT * from topo_connections"
+                c.execute(query)
+                rows=c.fetchall()
+                #print(rows)
+                if len(rows)!=0:
+                    for row in rows:
+                        if msg.datapath.id== row[0] and port_no== row[2] or msg.datapath.id== row[1] and port_no== row[3]: 
+                            delete_command='''DELETE FROM topo_connections WHERE source_dpid={} and 
+                            dest_dpid={} and source_port={} and dest_port={}'''.format(row[0], row[1],
+                                                                                       row[2], row[3])
+                            c.execute(delete_command)
+                            
+                            #Flip port status
+                            if row[4]== "UP":
+                                status="DOWN"
+     
+                            else:
+                                status="UP"
+                            
+                            insert_command='''INSERT OR REPLACE INTO topo_connections 
+                            (source_dpid, dest_dpid, source_port, dest_port, status) values(?,?,?,?,?)'''
+                            t=(row[0], row[1], row[2], row[3], status, )
+                            c.execute(insert_command, t)
+    
+                        
+                    conn.commit()
+                    conn.close()
+            
+        else:
+            self.logger.info("Illegal port state %s %s", port_no, reason)
+            
+
