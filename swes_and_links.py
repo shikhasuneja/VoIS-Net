@@ -285,7 +285,7 @@ class Topo_Discovery(app_manager.RyuApp):
         #self.last_updated= calendar.timegm(time.gmtime())
         time_difference= calendar.timegm(time.gmtime()) -self.last_updated
         self.last_updated= calendar.timegm(time.gmtime())
-        print("Difference is {}".format(time_difference))
+        #print("Difference is {}".format(time_difference))
         
         msg= ev.msg
         reason = msg.reason
@@ -300,6 +300,7 @@ class Topo_Discovery(app_manager.RyuApp):
         
         elif reason == ofproto.OFPPR_MODIFY:
             
+            #Persistence for accuracy to avoid false positives encountered on RYU
             if time_difference<4:
                 return
             
