@@ -2,7 +2,7 @@
 ##Date: 01/22/2019
 ##Topic: Topology Discovery
 ##Author: Srinidhi
-##Instructions: ryu run --observe-links swes_and_links.py
+##Instructions: ryu run --observe-links topology_detection.py
 
 from ryu.base import app_manager
 from ryu.controller import ofp_event
@@ -12,10 +12,11 @@ from ryu.ofproto import ofproto_v1_3
 from ryu.lib.packet import packet
 from ryu.lib.packet import ethernet
 from ryu.topology import event
-from ryu.topology.api import get_switch, get_link, get_all_host
+from ryu.topology.api import get_switch, get_link
 from ryu.lib.packet import ether_types
 import sqlite3, re, calendar, time, copy
 
+TOPOLOGY= 'topology.db'
 
 class Topo_Discovery(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
@@ -92,7 +93,7 @@ class Topo_Discovery(app_manager.RyuApp):
 
     #Add switches to db - non-unique with one switch dpid per row
     def add_swes_to_db(self):
-        conn= sqlite3.connect('topology.db')
+        conn= sqlite3.connect(TOPOLOGY)
         c= conn.cursor()
         
         c.execute('''CREATE TABLE IF NOT EXISTS switches 
@@ -112,7 +113,7 @@ class Topo_Discovery(app_manager.RyuApp):
     which is all link information (non-duplicate) in the whole topology
     """
     def add_topo_con_to_db(self):
-        conn= sqlite3.connect('topology.db')
+        conn= sqlite3.connect(TOPOLOGY)
         c= conn.cursor()
         """
         If table does not exist, create
@@ -186,9 +187,9 @@ class Topo_Discovery(app_manager.RyuApp):
         self.mac_to_port.setdefault(dpid, {})
         #learn a mac address to avoid FLOOD next time.
         self.mac_to_port[dpid][src]= in_port
-
+        
+        #Ignore LLDP 
         if eth.ethertype == ether_types.ETH_TYPE_LLDP:
-            # ignore lldp packet
             return
         
         #Ignore BPDUs
@@ -206,7 +207,7 @@ class Topo_Discovery(app_manager.RyuApp):
                                  {'host_mac': src}))
         
             #Add to database
-            conn= sqlite3.connect('topology.db')
+            conn= sqlite3.connect(TOPOLOGY)
             c= conn.cursor()
             c.execute('''CREATE TABLE IF NOT EXISTS host_connections 
                 (switch_dpid int, switch_port int, host_mac text, UNIQUE(switch_dpid, switch_port))''')
@@ -299,7 +300,7 @@ class Topo_Discovery(app_manager.RyuApp):
         dpid= int(re.findall(r'\d+', str(ev))[0])
         print("Switch {} left topology".format(dpid))
 
-        conn= sqlite3.connect('topology.db')
+        conn= sqlite3.connect(TOPOLOGY)
         c= conn.cursor()
         
         #Delete switch from TABLE switch
@@ -364,7 +365,7 @@ class Topo_Discovery(app_manager.RyuApp):
                 #print(type(msg.datapath.id))
                 #print(type(port_no))
                 #Open database
-                conn= sqlite3.connect('topology.db')
+                conn= sqlite3.connect(TOPOLOGY)
                 c= conn.cursor()    
                 
                 #Get switch and port row and check status
@@ -398,4 +399,3 @@ class Topo_Discovery(app_manager.RyuApp):
             
         else:
             self.logger.info("Illegal port state %s %s", port_no, reason)
-            
