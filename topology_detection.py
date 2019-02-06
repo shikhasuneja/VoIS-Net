@@ -12,8 +12,10 @@ from ryu.ofproto import ofproto_v1_3
 from ryu.lib.packet import packet
 from ryu.lib.packet import ethernet
 from ryu.topology import event
-from ryu.topology.api import get_switch, get_link
+from ryu.topology.api import get_switch, get_link, get_all_host
+from ryu.lib.packet import ether_types
 import sqlite3, re, calendar, time, copy
+
 
 class Topo_Discovery(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
@@ -21,6 +23,8 @@ class Topo_Discovery(app_manager.RyuApp):
         super(Topo_Discovery, self).__init__(*args, **kwargs)
         #Used for learning switch functioning
         self.mac_to_port= {}
+        self.host_macs= {}
+        self.host_connections= []
         self.last_updated= calendar.timegm(time.gmtime())
         """
         Used to store whole topology information (unique and non-duplicate values)
@@ -183,6 +187,37 @@ class Topo_Discovery(app_manager.RyuApp):
         #learn a mac address to avoid FLOOD next time.
         self.mac_to_port[dpid][src]= in_port
 
+        if eth.ethertype == ether_types.ETH_TYPE_LLDP:
+            # ignore lldp packet
+            return
+        
+        #Ignore BPDUs
+        if eth.ethertype==38:
+            return
+        
+        #Ignore IPv6
+        if eth.ethertype==34525:
+            return
+        
+        #Add host mapping if not present
+        if src not in self.host_macs.values():
+            self.host_macs[dpid]= src
+            self.host_connections.append(({'switch_dpid': dpid}, {'switch_port': in_port}, 
+                                 {'host_mac': src}))
+        
+            #Add to database
+            conn= sqlite3.connect('topology.db')
+            c= conn.cursor()
+            c.execute('''CREATE TABLE IF NOT EXISTS host_connections 
+                (switch_dpid int, switch_port int, host_mac text, UNIQUE(switch_dpid, switch_port))''')
+    
+            insert_command="INSERT OR REPLACE INTO host_connections (switch_dpid, switch_port, host_mac) values(?,?,?)"
+            t=(dpid, in_port, src, )
+            c.execute(insert_command, t)  
+            conn.commit()
+            conn.close()
+            
+
         if dst in self.mac_to_port[dpid]:
             out_port= self.mac_to_port[dpid][dst]
         else:
@@ -208,6 +243,9 @@ class Topo_Discovery(app_manager.RyuApp):
         out= parser.OFPPacketOut(datapath=datapath, buffer_id=msg.buffer_id,
                                   in_port=in_port, actions=actions, data=data)
         datapath.send_msg(out)
+        print("Host links:")
+        print(self.host_connections)
+        
     """
     The event EventSwitchEnter will trigger the activation of get_topology_data()
     i.e. we start getting topology data as soon a switch enters the ropology and connects to controller
@@ -220,8 +258,14 @@ class Topo_Discovery(app_manager.RyuApp):
         self.topo_raw_switches= copy.copy(get_switch(self, None))
         self.topo_raw_links= copy.copy(get_link(self, None))
         
+        
         #List with switch dpids as list elements
         self.topo_switches= [switch.dp.id for switch in self.topo_raw_switches]
+        #for dpid in self.topo_switches:
+        #self.hosts= copy.copy(get_all_host(self))
+        #print("Hosts:")
+        #print(self.hosts)
+        
         print("Switches")
         print(self.topo_switches)
         
@@ -268,6 +312,16 @@ class Topo_Discovery(app_manager.RyuApp):
         
         delete_command="DELETE FROM topo_connections WHERE dest_dpid={}".format(dpid)
         c.execute(delete_command)
+        
+        del self.host_macs[dpid]
+        #self.host_macs.remove(dpid)
+        #Remove host links connected to the switch
+        try:
+            delete_command="DELETE FROM host_connections WHERE switch_dpid={}".format(dpid)
+            c.execute(delete_command)
+            
+        except sqlite3.OperationalError:
+            pass
         
         conn.commit()
         conn.close()
@@ -345,4 +399,3 @@ class Topo_Discovery(app_manager.RyuApp):
         else:
             self.logger.info("Illegal port state %s %s", port_no, reason)
             
-
