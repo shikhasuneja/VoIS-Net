@@ -386,7 +386,8 @@ while True:
                 obj2.resolve_ctl_misconfig(version_misconfig_ctl)
                 print("Attempted fixing controller config. Waiting for 10s...")
                 time.sleep(10)
-        
+                break            
+
             else:
                 print("No ctl misconfig detected. Moving on to next step")
                 break
