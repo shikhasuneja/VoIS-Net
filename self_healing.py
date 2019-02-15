@@ -22,7 +22,7 @@ given the mgmt IP of a switch
 '''
 def parse_this_switch(switch_mgmt_ip):
     if os.path.isfile(NETWORK_TRUTH):
-        with open('inventory.csv') as csvfile:
+        with open(NETWORK_TRUTH) as csvfile:
             reader=_csv.reader(csvfile)
             
             for row in reader:
@@ -31,7 +31,7 @@ def parse_this_switch(switch_mgmt_ip):
                     The function call should have: switch_dpid, controller_ip, of_versions 
                     to catch rows 0,1,2 respectively
                     '''
-                    return(row[0], row[1], row[2])
+                    return(row[0], row[2], row[3])
             
             csvfile.close()
 
@@ -45,11 +45,11 @@ def parse_this_switch(switch_mgmt_ip):
 Returns list of mgmt IPs of all switches
 as reflected in csv file
 '''
-def get_my_switches(self):
+def get_my_switches():
     my_switch_mgmt_ips= []
 
     if os.path.isfile(NETWORK_TRUTH):
-        with open('inventory.csv') as csvfile:
+        with open(NETWORK_TRUTH) as csvfile:
             reader=_csv.reader(csvfile)
 
             for row in reader:
@@ -105,10 +105,12 @@ class Check_Ver_Mismatch(threading.Thread):
         self.of_versions= of_versions
     
     def run(self):
-        self.net_connect= ConnectHandler(**self.net_device)
-        self.net_connect.find_prompt()
+        #self.net_connect= ConnectHandler(**self.net_device)
+        #self.net_connect.find_prompt()
         switch_dpid, true_controller_ip, true_of_version= parse_this_switch(self.ip)
-        
+        #print("Here")
+        #print(true_of_version)
+        #print(self.of_versions)
         if true_of_version in self.of_versions:
             version_match_ovses.append(self.ip)
         
@@ -185,7 +187,7 @@ print(disconnected_ovses)
 
 #Get ver mismatched switches list
 
-disconnected_ovses['ip'], disconnected_ovses['of_versions']
+obj.check_ver_mismatch(disconnected_ovses)
 
     
     
