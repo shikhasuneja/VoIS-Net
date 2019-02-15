@@ -132,7 +132,8 @@ class Topo_Discovery(app_manager.RyuApp):
             self.dest_port= self.final_topo_connections[i][3]['dest_port']
             
             #Read from existing table
-            query="SELECT * from topo_connections"
+            query='''SELECT * from topo_connections where source_dpid={} and dest_dpid={} 
+            or source_dpid={} and dest_dpid={}'''.format(self.source_dpid, self.dest_dpid)
             c.execute(query)
             rows=c.fetchall()
           
@@ -145,30 +146,9 @@ class Topo_Discovery(app_manager.RyuApp):
                 t=(self.source_dpid, self.dest_dpid, self.source_port, self.dest_port, status, )
                 c.execute(insert_command, t)
             
+            
             else:
-                #To make sure to not add info to database even if one row in DB is interchanged duplicate
-                counter=0
-                for row in rows:
-                        #If duplicate entry with just switches interchanged
-    
-                    if self.dest_dpid== row[0] and self.source_dpid== row[1]:
-    
-                        if self.dest_port== row[2] and self.source_port== row[3]:
-                            counter=1
-                            continue
-    
-                        #Switches interchanged, sure, but topo has also changed because ports have changed
-                        elif counter==0:
-                            status="UP"
-                            insert_command="INSERT OR REPLACE INTO topo_connections (source_dpid, dest_dpid, source_port, dest_port, status) values(?,?,?,?,?)"
-                            t=(self.source_dpid, self.dest_dpid, self.source_port, self.dest_port, status, )
-                            c.execute(insert_command, t)  
-                    
-                    elif counter==0:
-                        status="UP"
-                        insert_command="INSERT OR REPLACE INTO topo_connections (source_dpid, dest_dpid, source_port, dest_port, status) values(?,?,?,?,?)"
-                        t=(self.source_dpid, self.dest_dpid, self.source_port, self.dest_port, status, )
-                        c.execute(insert_command, t)  
+                continue
                     
                      
         conn.commit()
