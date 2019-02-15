@@ -158,13 +158,13 @@ class Topo_Discovery(app_manager.RyuApp):
                             continue
     
                         #Switches interchanged, sure, but topo has also changed because ports have changed
-                        elif counter!=1:
+                        elif counter==0:
                             status="UP"
                             insert_command="INSERT OR REPLACE INTO topo_connections (source_dpid, dest_dpid, source_port, dest_port, status) values(?,?,?,?,?)"
                             t=(self.source_dpid, self.dest_dpid, self.source_port, self.dest_port, status, )
                             c.execute(insert_command, t)  
                     
-                    elif counter!=1:
+                    elif counter==0:
                         status="UP"
                         insert_command="INSERT OR REPLACE INTO topo_connections (source_dpid, dest_dpid, source_port, dest_port, status) values(?,?,?,?,?)"
                         t=(self.source_dpid, self.dest_dpid, self.source_port, self.dest_port, status, )
@@ -205,6 +205,10 @@ class Topo_Discovery(app_manager.RyuApp):
         if eth.ethertype==34525:
             return
         
+        f=open('log.txt','w')
+        f.write("False host packet in\n")
+        f.write(eth)
+        f.close()
         #Add host mapping if not present
         if src not in self.host_macs.values():
             self.host_macs[dpid]= src
