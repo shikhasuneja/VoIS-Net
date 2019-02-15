@@ -1,4 +1,4 @@
-import _csv, os, threading, re
+import _csv, os, threading, re, time
 from netmiko.ssh_dispatcher import ConnectHandler
 
 CONTROLLER_IP= "172.16.3.15"
@@ -12,7 +12,6 @@ version_match_ovses= []
 version_mismatch_ovses= []
 version_config_ctl= []
 version_misconfig_ctl= []
-
 
 '''
 Returns dpid, controller ip and of_version configured on a switch 
@@ -136,6 +135,49 @@ class Check_Ctl_Misconfig(threading.Thread):
             version_misconfig_ctl.append(self.ip)
 
 
+class Resolve_Ver_Mismatch(threading.Thread):
+    def __init__(self, net_device, true_of_version):
+        threading.Thread.__init__(self)
+        self.net_device= net_device
+        self.true_of_version= true_of_version
+    
+    def run(self):
+        self.net_connect= ConnectHandler(**self.net_device)
+        self.net_connect.find_prompt()
+        
+        #Add true_of_version
+        command="sudo -S <<< 7654321 ovs-vsctl set bridge {} protocols={}".format(BRIDGE, 
+                                                                                  self.true_of_version) 
+        
+        output= self.net_connect.send_command_timing(command, 
+                                                     strip_command= False, strip_prompt= False)
+
+        
+        print("Added Version: {}, Switch: {}".format(self.true_of_version, self.net_device['ip']))
+
+
+class Resolve_Ctl_Misconfig(threading.Thread):
+    def __init__(self, net_device, true_ctl_config):
+        threading.Thread.__init__(self)
+        self.net_device= net_device
+        self.true_ctl_config= true_ctl_config
+    
+    def run(self):
+        self.net_connect= ConnectHandler(**self.net_device)
+        self.net_connect.find_prompt()
+    
+        #Remove false ctl config
+        command="sudo -S <<< 7654321 ovs-vsctl del-controller {}".format(BRIDGE) 
+        output= self.net_connect.send_command_timing(command, 
+                                                     strip_command= False, strip_prompt= False)
+        
+        #Add true ctl config
+        command="sudo -S <<< 7654321 ovs-vsctl set-controller {} {}".format(BRIDGE, 
+                                                                        self.true_ctl_config)
+        output= self.net_connect.send_command_timing(command, 
+                                                     strip_command= False, strip_prompt= False)
+
+
 class Detect_Issues():
     def __init__(self):
         pass
@@ -225,42 +267,134 @@ class Detect_Issues():
         version_misconfig_ctl= []
         return(version_config_ctl1, version_misconfig_ctl1)
         
-           
+
+
+class Resolve_Issues():
+    def __init__(self):
+        pass
+    
+    #Takes version_mismatch_ovses as argument and resolves version mismatch on those ovses
+    def resolve_ver_mismatch(self, version_mismatch_ovses):
+        self.version_mismatch_ovses= version_mismatch_ovses
+        threads= []
+        
+        for ip in self.version_mismatch_ovses:
+            #Device to log in to
+            self.net_device={
+                'device_type':'linux',
+                'ip': ip,
+                'username': USERNAME,
+                'use_keys': 'True',
+                }
+            
+            #New version to add is the actual of_version from csv
+            switch_dpid, true_controller_config, true_of_version= parse_this_switch(ip)  
+            
+            thr_resolve_ver_mismatch= Resolve_Ver_Mismatch(self.net_device, true_of_version)
+            thr_resolve_ver_mismatch.daemon= True
+            thr_resolve_ver_mismatch.start()
+            threads.append(thr_resolve_ver_mismatch)
+        
+        for element in threads:
+            element.join() 
+
+
+    #Takes version_misconfig_ctl as argument and resolves ctl misconfig on those ovses
+    def resolve_ctl_misconfig(self, version_misconfig_ctl):    
+        self.version_misconfig_ctl= version_misconfig_ctl
+        
+        threads= []
+        for ip in version_misconfig_ctl:
+            #Device to log in to
+            self.net_device={
+                'device_type':'linux',
+                'ip': ip,
+                'username': USERNAME,
+                'use_keys': 'True',
+                }
+            
+            #New version to add is the actual of_version from csv
+            switch_dpid, true_controller_config, true_of_version= parse_this_switch(ip)              
+            
+            thr_resolve_ctl_misconfig= Resolve_Ctl_Misconfig(self.net_device, true_controller_config)
+            thr_resolve_ctl_misconfig.daemon= True
+            thr_resolve_ctl_misconfig.start()
+            threads.append(thr_resolve_ctl_misconfig)
+        
+        for element in threads:
+            element.join()
+
+
+
+
 #UNIT TESTS
-print("\n\n")
-print("*"*50)
-print("STEP 1")
-#Get Disconnected switches list    
-obj= Detect_Issues()
-connected_ovses, disconnected_ovses= obj.check_controller_conn()
-print("Connected OVSes:")
-print(connected_ovses)
-print("Disconnected OVSes")
-print(disconnected_ovses)
-
-print("\n\n")
-print("*"*50)
-print("STEP 2")
-
-#Get ver mismatched switches list
-version_match_ovses, version_mismatch_ovses= obj.check_ver_mismatch(disconnected_ovses)
-print("Ver matched OVSes")
-print(version_match_ovses)
-print("Ver mismatched OVSes")
-print(version_mismatch_ovses)
-
-
-'''
-At this stage if any mismatched ovses, you want to 'ask' to fix 
-and fix and check disconnected ovses. The disconnected ovses at
-this stage should be fed to check ctl misconfig function
-'''
-print("\n\n")
-print("*"*50)
-print("STEP 3")
-version_config_ctl, version_misconfig_ctl= obj.check_ctl_misconfig(disconnected_ovses)
-print("Properly configured controllers:")
-print(version_config_ctl)
-print("Misconfigured controllers:")
-print(version_misconfig_ctl)
-
+while True:
+    print("\n\n")
+    print("*"*50)
+    print("STEP 1")
+    #Get Disconnected switches list    
+    obj1= Detect_Issues()
+    connected_ovses, disconnected_ovses= obj1.check_controller_conn()
+    print("Connected OVSes:")
+    print(connected_ovses)
+    print("Disconnected OVSes")
+    print(disconnected_ovses)
+    
+    if len(disconnected_ovses)!= 0:
+        print("\n\n")
+        print("*"*50)
+        print("STEP 2")
+        
+        #Get ver mismatched switches list
+        version_match_ovses, version_mismatch_ovses= obj1.check_ver_mismatch(disconnected_ovses)
+        print("Ver matched OVSes")
+        print(version_match_ovses)
+        print("Ver mismatched OVSes")
+        print(version_mismatch_ovses)
+        
+        
+        '''
+        At this stage if any mismatched ovses, you want to 'ask' to fix 
+        and fix and check disconnected ovses. The disconnected ovses at
+        this stage should be fed to check ctl misconfig function
+        '''
+        
+        obj2= Resolve_Issues()
+        #Fix version mismatch
+        if len(version_match_ovses)!= 0:
+            obj2.resolve_ver_mismatch(version_mismatch_ovses)
+            print("Attempted fixing version. Waiting for 10s...")
+            time.sleep(10)
+            #Check connectivity again now
+            connected_ovses, disconnected_ovses= obj1.check_controller_conn()
+        
+        else:
+            print("No version mismatch detected. Moving on to next step.")
+        
+        
+        if len(disconnected_ovses)!= 0:
+            print("\n\n")
+            print("*"*50)
+            print("STEP 3")
+            version_config_ctl, version_misconfig_ctl= obj1.check_ctl_misconfig(disconnected_ovses)
+            print("Properly configured controllers:")
+            print(version_config_ctl)
+            print("Misconfigured controllers:")
+            print(version_misconfig_ctl)
+            
+            if len(version_misconfig_ctl)!= 0:
+                obj2.resolve_ctl_misconfig(version_misconfig_ctl)
+                print("Attempted fixing controller config. Waiting for 10s...")
+                time.sleep(10)
+        
+            else:
+                print("No ctl misconfig detected. Moving on to next step")
+                break
+            
+        else:
+            print("All OVSes are connected to controller")
+            break
+            
+    else:
+        print("All OVSes are connected to controller")
+        break
