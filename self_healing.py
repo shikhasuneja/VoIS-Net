@@ -1,7 +1,5 @@
 import _csv, os, threading, re
-from napalm import get_network_driver
 from netmiko.ssh_dispatcher import ConnectHandler
-
 
 CONTROLLER_IP= "172.16.3.15"
 USERNAME= 'batman'
@@ -13,7 +11,6 @@ connected_ovses= []
 disconnected_ovses= []
 version_match_ovses= []
 version_mismatch_ovses= []
-
 
 
 '''
@@ -74,7 +71,8 @@ class Check_Ctl_Connectivity(threading.Thread):
     def run(self):
         self.net_connect= ConnectHandler(**self.net_device)
         self.net_connect.find_prompt()
-        output= self.net_connect.send_command_timing("sudo -S <<< 7654321 ovs-vsctl show | grep is_connected", strip_command= False, strip_prompt= False)
+        output= self.net_connect.send_command_timing("sudo -S <<< 7654321 ovs-vsctl show | grep is_connected", 
+                                                     strip_command= False, strip_prompt= False)
         output= output.split('\n')[1]
         
         if 'true' in output:
@@ -83,7 +81,8 @@ class Check_Ctl_Connectivity(threading.Thread):
         else:
             #disconnected_ovses.append(self.net_device['ip'])
             command= "sudo -S <<< 7654321 ovs-vsctl get-controller {}".format(BRIDGE)
-            controller_config= self.net_connect.send_command_timing(command, strip_command= False, strip_prompt= False)
+            controller_config= self.net_connect.send_command_timing(command, 
+                                                                    strip_command= False, strip_prompt= False)
             controller_config= controller_config.split('\n')[1]
 
             
@@ -158,7 +157,9 @@ class Detect_Issues():
 
     #Calls threads to check version mismatch of disconnected switches provided as argument
     def check_ver_mismatch(self, disconnected_ovses):
+        global version_match_ovses, version_mismatch_ovses
         self.disconnected_ovses= disconnected_ovses
+        
         threads= []
         for ovs in self.disconnected_ovses: 
             thr_check_ver_mismatch= Check_Ver_Mismatch(ovs['switch_mgmt_ip'], ovs['of_versions'])
@@ -169,26 +170,35 @@ class Detect_Issues():
         for element in threads:
             element.join()
         
-        print("Matched versions")
-        print(version_match_ovses)
-        print("Mismatched versions")
-        print(version_mismatch_ovses)
-        
-        
-        
+        #print("Matched versions")
+        #print(version_match_ovses)
+        #print("Mismatched versions")
+        #print(version_mismatch_ovses)
+        version_match_ovses1= version_match_ovses
+        version_mismatch_ovses1= version_mismatch_ovses
+        version_match_ovses= []
+        version_mismatch_ovses= []
+        return(version_match_ovses1, version_mismatch_ovses1)
+
+
+print("\n\n")
+print("*"*50)
+print("STEP 1")
 #Get Disconnected switches list    
 obj= Detect_Issues()
 connected_ovses, disconnected_ovses= obj.check_controller_conn()
 print("Connected OVSes:")
 print(connected_ovses)
-print("Disconencted OVSes")
+print("Disconnected OVSes")
 print(disconnected_ovses)
 
-
+print("\n\n")
+print("*"*50)
+print("STEP 2")
 #Get ver mismatched switches list
+version_match_ovses, version_mismatch_ovses= obj.check_ver_mismatch(disconnected_ovses)
+print("Ver matched OVSes")
+print(version_match_ovses)
+print("Ver mismatched OVSes")
+print(version_mismatch_ovses)
 
-obj.check_ver_mismatch(disconnected_ovses)
-
-    
-    
-    
