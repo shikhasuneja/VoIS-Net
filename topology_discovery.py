@@ -133,14 +133,14 @@ class Topo_Discovery(app_manager.RyuApp):
             
             #Read from existing table
             query='''SELECT * from topo_connections where source_dpid={} and dest_dpid={} 
-            or source_dpid={} and dest_dpid={}'''.format(self.source_dpid, self.dest_dpid)
+            or source_dpid={} and dest_dpid={}'''.format(self.source_dpid, self.dest_dpid, self.dest_dpid, self.source_dpid)
             c.execute(query)
             rows=c.fetchall()
           
             if len(rows)== 0:
                 #If not duplicate
                 #Insert or replace to ensure topology updation takes place and 
-                #duplicate entries are not created
+                #duplic ate entries are not created
                 status="UP"
                 insert_command="INSERT OR REPLACE INTO topo_connections (source_dpid, dest_dpid, source_port, dest_port, status) values(?,?,?,?,?)"
                 t=(self.source_dpid, self.dest_dpid, self.source_port, self.dest_port, status, )
