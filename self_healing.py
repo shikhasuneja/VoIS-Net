@@ -361,7 +361,7 @@ while True:
         
         obj2= Resolve_Issues()
         #Fix version mismatch
-        if len(version_match_ovses)!= 0:
+        if len(version_mismatch_ovses)!= 0:
             obj2.resolve_ver_mismatch(version_mismatch_ovses)
             print("Attempted fixing version. Waiting for 10s...")
             time.sleep(10)
