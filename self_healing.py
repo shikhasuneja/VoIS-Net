@@ -4,13 +4,14 @@ from netmiko.ssh_dispatcher import ConnectHandler
 CONTROLLER_IP= "172.16.3.15"
 USERNAME= 'batman'
 PASSWORD= '7654321'
-MY_OVSES= ['1', '2', '3']
 NETWORK_TRUTH= 'network_truth.csv'
 BRIDGE= 'br0'
 connected_ovses= []
 disconnected_ovses= []
 version_match_ovses= []
 version_mismatch_ovses= []
+version_config_ctl= []
+version_misconfig_ctl= []
 
 
 '''
@@ -104,9 +105,10 @@ class Check_Ver_Mismatch(threading.Thread):
         self.of_versions= of_versions
     
     def run(self):
+        global version_match_ovses, version_mismatch_ovses
         #self.net_connect= ConnectHandler(**self.net_device)
         #self.net_connect.find_prompt()
-        switch_dpid, true_controller_ip, true_of_version= parse_this_switch(self.ip)
+        switch_dpid, true_controller_config, true_of_version= parse_this_switch(self.ip)
         #print("Here")
         #print(true_of_version)
         #print(self.of_versions)
@@ -115,6 +117,23 @@ class Check_Ver_Mismatch(threading.Thread):
         
         else:
             version_mismatch_ovses.append(self.ip)
+
+
+class Check_Ctl_Misconfig(threading.Thread):
+    def __init__(self, ip, controller_config):
+        threading.Thread.__init__(self)
+        self.ip= ip
+        self.controller_config= controller_config
+    
+    def run(self):
+        global version_config_ctl, version_misconfig_ctl
+        switch_dpid, true_controller_config, true_of_version= parse_this_switch(self.ip)
+
+        if self.controller_config== true_controller_config:
+            version_config_ctl.append(self.ip)
+        
+        else:
+            version_misconfig_ctl.append(self.ip)
 
 
 class Detect_Issues():
@@ -181,6 +200,33 @@ class Detect_Issues():
         return(version_match_ovses1, version_mismatch_ovses1)
 
 
+    #Calls threads to check ctl misconfig of disconnected switches provided as argument
+    def check_ctl_misconfig(self, disconnected_ovses):
+        global version_config_ctl, version_misconfig_ctl
+        self.disconnected_ovses= disconnected_ovses
+        
+        threads= []
+        for ovs in self.disconnected_ovses: 
+            thr_check_ctl_misconfig= Check_Ctl_Misconfig(ovs['switch_mgmt_ip'], ovs['controller_config'])
+            thr_check_ctl_misconfig.daemon= True
+            thr_check_ctl_misconfig.start()
+            threads.append(thr_check_ctl_misconfig)
+        
+        for element in threads:
+            element.join()
+        
+        #print("Properly configured controllers:")
+        #print(version_config_ctl)
+        #print("Misconfigured controllers:")
+        #print(version_misconfig_ctl)
+        version_config_ctl1= version_config_ctl
+        version_misconfig_ctl1= version_misconfig_ctl
+        version_config_ctl= []
+        version_misconfig_ctl= []
+        return(version_config_ctl1, version_misconfig_ctl1)
+        
+           
+#UNIT TESTS
 print("\n\n")
 print("*"*50)
 print("STEP 1")
@@ -195,10 +241,26 @@ print(disconnected_ovses)
 print("\n\n")
 print("*"*50)
 print("STEP 2")
+
 #Get ver mismatched switches list
 version_match_ovses, version_mismatch_ovses= obj.check_ver_mismatch(disconnected_ovses)
 print("Ver matched OVSes")
 print(version_match_ovses)
 print("Ver mismatched OVSes")
 print(version_mismatch_ovses)
+
+
+'''
+At this stage if any mismatched ovses, you want to 'ask' to fix 
+and fix and check disconnected ovses. The disconnected ovses at
+this stage should be fed to check ctl misconfig function
+'''
+print("\n\n")
+print("*"*50)
+print("STEP 3")
+version_config_ctl, version_misconfig_ctl= obj.check_ctl_misconfig(disconnected_ovses)
+print("Properly configured controllers:")
+print(version_config_ctl)
+print("Misconfigured controllers:")
+print(version_misconfig_ctl)
 
