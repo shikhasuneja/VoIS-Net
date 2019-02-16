@@ -51,16 +51,17 @@ def get_topo_details():
     hosts = [host[1] for host in hosts_switches_links]
     return switches, links, hosts, hosts_switches_links
 
-def get_edge_labels(G, label_name):
+def get_edge_labels(links, label_name):
     """ Gets labels to be set on the edges based on the label_name
         args:
-            G: The networkx graph object
+            links: links between switches as per the database
             label: The label name that needs to be extracted from the graph object
     """
-    try:
-        labels_dict = dict([((u,v,),d[label_name]) for u,v,d in G.edges(data=True)])
-    except KeyError:
-        labels_dict = {}
+
+    labels_dict = {}
+    for link in links:
+        # graph edges = (tail, head) = (dst_dpid, src_dpid)
+        labels_dict[(link[1], link[0])] = link[2][label_name]
     return labels_dict
 
 def set_edge_labels(G, pos, edge_labels, label_pos):
@@ -76,16 +77,32 @@ def set_edge_labels(G, pos, edge_labels, label_pos):
     label_pos = label_pos)
 
 def draw_nodes(G, switches, hosts):
+    """ Draw nodes of the graph including switches and hosts
+        args:
+            G: The networkx graph object
+            switches: switches in the topology as per the topology database
+            hosts: hosts in the topology as per the topology database
+    """
+
     G.add_nodes_from(switches)
     G.add_nodes_from(hosts)
     global pos
     pos = nx.spring_layout(G)         # positions for all nodes
     nx.draw_networkx_nodes(G, pos, node_shape = 's', labels = True,
-        nodelist = switches, node_color='skyblue', node_size=6000)
+        nodelist = switches, node_color = 'skyblue', node_size = 6000,
+        edgecolors = 'k')
     nx.draw_networkx_nodes(G, pos, node_shape = 's', labels = True,
-        nodelist = hosts, node_color='skyblue', node_size=12000, alpha = 0.2)
+        nodelist = hosts, node_color = 'skyblue', node_size = 12000,
+        edgecolors = 'k', alpha = 0.2)
 
 def draw_edges(G, links, hosts_switches_links):
+    """ Draw edges of the graph including links between all nodes (switches/hosts)
+        args:
+            G: The networkx graph object
+            links: links between switches
+            hosts_switches_links: links between hosts and switches
+    """
+
     G.add_edges_from(links)
     G.add_edges_from(hosts_switches_links)
     up_links, down_links = check_link_status(links)
@@ -95,6 +112,15 @@ def draw_edges(G, links, hosts_switches_links):
     edge_color = 'g')
 
 def check_link_status(links):
+    """ Checks the status (up/down) of the links, and segregates them into two
+        lists based on the status
+        args:
+            links: links between switches as per the topology database
+        returns:
+            up_links: the links with status "UP"
+            down_links: the links with status "DOWN"
+     """
+
     up_links = []
     down_links = []
     for link in links:
@@ -105,12 +131,18 @@ def check_link_status(links):
             down_links.append(link)
     return up_links, down_links
 
-def draw_labels(G):
+def draw_labels(G, links):
+    """ Draws labels on the graph (nodes/edges)
+        args:
+            G: The graph object
+            links: links between switches
+    """
+
     nx.draw_networkx_labels(G, pos, font_size = 10, font_family='sans-serif')
-    src_ports = get_edge_labels(G, 'src_port')
-    set_edge_labels(G, pos, src_ports, 0.25)
-    dst_ports = get_edge_labels(G, 'dst_port')
-    set_edge_labels(G, pos, dst_ports, 0.75)
+    src_ports = get_edge_labels(links, 'src_port')
+    set_edge_labels(G, pos, src_ports, 0.2)
+    dst_ports = get_edge_labels(links, 'dst_port')
+    set_edge_labels(G, pos, dst_ports, 0.8)
 
 def draw_topology(switches, links, hosts, hosts_switches_links):
     """ Function to draw the network topology
@@ -121,12 +153,14 @@ def draw_topology(switches, links, hosts, hosts_switches_links):
     """
 
     G = nx.MultiGraph()
+    plt.figure(num=TOPOLOGY_IMAGE, figsize=(12,12), dpi=80, edgecolor='k')
     draw_nodes(G, switches, hosts)
     draw_edges(G, links, hosts_switches_links)
-    draw_labels(G)
+    draw_labels(G, links)
     plt.axis('off')
     plt.savefig(TOPOLOGY_IMAGE)
-    plt.show()
+    print("Saved the network topology as {}".format(TOPOLOGY_IMAGE))
+
 
 if __name__ == "__main__":
     switches, links, hosts, hosts_switches_links = get_topo_details()
