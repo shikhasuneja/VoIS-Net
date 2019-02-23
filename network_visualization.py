@@ -1,3 +1,4 @@
+
 """
     Team VoIS-Network
     Date: 01/28/2019
@@ -13,7 +14,7 @@ TOPOLOGY_DB = 'topology.db'
 SW_TABLE = 'switches'
 LINKS_TABLE = 'topo_connections'
 HOSTS_TABLE = 'host_connections'
-TOPOLOGY_IMAGE = 'topology.png'
+TOPOLOGY_IMAGE = 'static/topology.png'
 PORT_UP = 'UP'
 PORT_DOWN = 'DOWN'
 
@@ -160,9 +161,23 @@ def draw_topology(switches, links, hosts, hosts_switches_links):
     plt.axis('off')
     plt.savefig(TOPOLOGY_IMAGE)
     print("Saved the network topology as {}".format(TOPOLOGY_IMAGE))
+    #plt.show()
+    return
 
 
+def visualize_topology():
+    switches, links, hosts, hosts_switches_links = get_topo_details()
+    if switches or links or hosts:
+        draw_topology(switches, links, hosts, hosts_switches_links)
+
+    return
+
+'''
 if __name__ == "__main__":
     switches, links, hosts, hosts_switches_links = get_topo_details()
     if switches or links or hosts:
         draw_topology(switches, links, hosts, hosts_switches_links)
+        
+'''        
+        
+
