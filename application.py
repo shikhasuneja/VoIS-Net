@@ -217,7 +217,7 @@ class EventBestPathChanged(EventBase):
         
         else:
             print("Adding route for {}".format(path.nlri.addr))
-            command="sudo -S <<< 7654321 ip route add {}/24 via 172.16.3.16".format(path.nlri.addr)
+            command="sudo -S <<< 7654321 ip route add {}/32 via 172.16.3.16".format(path.nlri.addr)
             net_connect.send_command_timing(command, strip_command= False, strip_prompt= False)
         
         
