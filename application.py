@@ -115,7 +115,7 @@ API Reference
 
 import logging
 import os
-
+from netmiko import ConnectHandler
 from ryu import cfg
 from ryu.lib import hub
 from ryu.utils import load_source
@@ -199,6 +199,28 @@ class EventBestPathChanged(EventBase):
         print("Route received: {}".format(path.nlri.addr))
         print("#######")
 
+        #Adding route on Linux kernel
+        net_device={
+                'device_type':'linux',
+                'ip': '172.16.3.12',
+                'username': 'batman',
+                'use_keys': 'True',
+                }
+
+        net_connect= ConnectHandler(**net_device)
+        net_connect.find_prompt()
+        command= "sudo -S <<< 7654321 route -n"
+        route_table= net_connect.send_command_timing(command, strip_command= False, strip_prompt= False)
+        
+        if str(path.nlri.addr) in route_table:
+            print("Not adding route for {}".format(path.nlri.addr))
+        
+        else:
+            print("Adding route for {}".format(path.nlri.addr))
+            command="sudo -S <<< 7654321 ip route add {}/24 via 172.16.3.16".format(path.nlri.addr)
+            net_connect.send_command_timing(command, strip_command= False, strip_prompt= False)
+        
+        
 class EventAdjRibInChanged(EventBase):
     """
     Event called when any adj-RIB-in path is changed due to UPDATE messages
