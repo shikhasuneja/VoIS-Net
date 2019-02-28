@@ -19,7 +19,7 @@ def voisnet_cli(intent):
     """
 
     click.echo("The user intent is - \"%s\"!" % intent)
-    if "visualize topology" or "show topology" in intent:
+    if "visualize topology" or "show topology" in intent.lower():
         visualize_topology(cli = True)
         plt.show()
 
