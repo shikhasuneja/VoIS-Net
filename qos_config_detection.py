@@ -114,6 +114,8 @@ class migrate_queue(queue_set_config):
 if __name__ == '__main__':
        config1=queue_set_config()
        config1.topo_info()
+       config1.put_ovsdb()
+       config1.post_config()
        a=migrate_queue(config1)
        while True:
            b=a.update_errors()
