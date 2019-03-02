@@ -19,20 +19,17 @@ class queue_set_config(object):
         if len(n) < 16 and n[0:2] == '0x':
             return (n[2:].zfill(16))
 
-
     def get_response_from_Server(self,r1):
         if int(r1.status) not in [201,200]:
             print ("Rejected request, Status code: {}, Reason: {}".format(r1.status,(r1.read()).decode()))
         else:
             return r1.read()
 
-
     def getexample(self,body):
         self.conn.request("GET", body)
         r1 = self.conn.getresponse()
         responseObject = json.loads(self.get_response_from_Server(r1))
         return responseObject
-
 
     def csv_switch_ip(self,dpid):
         with open("network_sof.csv") as a:
@@ -41,7 +38,6 @@ class queue_set_config(object):
             for i in _file:
                 if dpid == int(i[0]):
                     return i[1]
-
 
     def topo_info(self):
         body="/stats/switches"
@@ -70,7 +66,6 @@ class queue_set_config(object):
             r1 = self.conn.getresponse()
             (self.get_response_from_Server(r1))
 
-
     def queue_format(self):
         a=list()
         for k,v in self.queue_config.items():
@@ -78,13 +73,11 @@ class queue_set_config(object):
             a.append(b)
         return(", ".join(a))
 
-
     def post_queue(self,p_name,xdpid):
             a=self.queue_format()
             BODY="{{\"port_name\": \"{}\", \"type\": \"linux-htb\", \"max_rate\": \"{}\", \"queues\": [{}]}}".format(p_name,self.max_R_common,a)
             r = requests.post('http://{}:8080/qos/queue/{}'.format(self.controller_ip,xdpid), data=(BODY))
             print(r.status_code)
-
 
     def post_config(self):
         for k,v in self.switchdpid_port_ip.items():
@@ -97,7 +90,6 @@ class migrate_queue(queue_set_config):
         self.switchdpid_port_dict=a.switchdpid_port_ip
         self.error_dict={}
         #print(self.switchdpid_port_dict,'===')
-
 
 
     def error_find(self,a1):
@@ -118,8 +110,6 @@ class migrate_queue(queue_set_config):
                                 self.switchdpid_port_dict[k]['ports'][i['port_no']]['queue_port_data'][i['queue_id']]={}
                         self.switchdpid_port_dict[k]['ports'][i['port_no']]['queue_port_data'][i['queue_id']].update({"tx_errors":i['tx_errors']})
         ac=self.error_find(self.switchdpid_port_dict)
-
-
 
 if __name__ == '__main__':
        config1=queue_set_config()
