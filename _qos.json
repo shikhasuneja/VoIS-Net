@@ -1,0 +1,7 @@
+{
+    "queue_config": {"TCP": {"min":10000000,"max":30000000}, "UDP": {"min":10000000,"max":20000000}, "normal": {"min":10000000,"max":50000000}},
+    "max_R_common": 100000000,
+    "controller_ip": "192.168.199.6",
+    "controller_port": 8080,
+    "ovsdb_addr_port":6632
+}
