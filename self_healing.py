@@ -101,9 +101,8 @@ def get_my_routers():
                 if row[0]!= "Device":
                     my_router_ips.append(row[0])
                 
-                return(my_router_ips)
-                csvfile.close()    
-
+            return(my_router_ips)
+            csvfile.close()    
                                                 
     else:
         ######Replace print with log later
@@ -291,17 +290,18 @@ class Resolve_BGP_Misconfig(threading.Thread):
     def run(self):
         self.config_set= []
         self.net_connect= ConnectHandler(**self.net_device)
-        self.local_as= misconfigured_routers_info['local_as']
-        self.misconfigured_line= self.misconfigured_routers_info['misconfigured_line']
-        self.true_remote_as= self.misconfigured_routers_info['true_remote_as']
-        self.true_remote_ip= self.misconfigured_routers_info['true_remote_ip']
+        
+        self.local_as= misconfigured_routers_info[0]['local_as']
+        self.misconfigured_line= self.misconfigured_routers_info[0]['misconfigured_line']
+        self.true_remote_as= self.misconfigured_routers_info[0]['true_remote_as']
+        self.true_remote_ip= self.misconfigured_routers_info[0]['true_remote_ip']
         
         self.config_set.append('router bgp {}'.format(self.local_as))
-        if self.misconfigured_line!= None:
+        if self.misconfigured_line:
             self.config_set.append('no {}'.format(self.misconfigured_line))
             
         self.config_set.append('neighbor {} remote-as {}'.format(self.true_remote_ip, self.true_remote_as))
-        self.net_connect.send_config_set()
+        self.net_connect.send_config_set(self.config_set)
 
 class Detect_Issues():
     def __init__(self):
@@ -612,8 +612,11 @@ while True:
         print("All OVSes are connected to controller. Checking BGP misconfiguration")
         my_routers= get_my_routers()
         #Detect misconfigured routers
+        print(my_routers)
         obj3= Detect_Issues()
         misconfigured_routers_info= obj3.detect_bgp_misconfig(my_routers)
+        print("Misconfigd routers")
+        print(misconfigured_routers_info)
         
         if len(misconfigured_routers_info)!= 0:
             #Resolve misconfigured routers
@@ -627,4 +630,5 @@ while True:
             print("*"*50)
             print("END OF SELF_HEALING. If not resolved, check self.heal.log for detailed info.")
             print("*"*50)
+        
             break
