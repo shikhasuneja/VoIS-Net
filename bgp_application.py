@@ -138,7 +138,8 @@ from ryu.services.protocols.bgp.utils.validation import is_valid_ipv6
 LOG = logging.getLogger('bgpspeaker.application')
 
 CONF = cfg.CONF['bgp-app']
-
+print("***")
+print(CONF)
 
 @add_bgp_error_metadata(code=BIN_ERROR,
                         sub_code=1,
@@ -195,14 +196,15 @@ class EventBestPathChanged(EventBase):
         super(EventBestPathChanged, self).__init__()
         self.path = path
         self.is_withdraw = is_withdraw
-        print("#######")
-        print("Route received: {}".format(path.nlri.addr))
-        print("#######")
+        #print("#######")
+        #print("Route received: {}".format(path.nlri.addr))
+        #print(self.path)
+        #print("#######")
 
         #Adding route on Linux kernel
         net_device={
                 'device_type':'linux',
-                'ip': '172.16.3.12',
+                'ip': '172.16.3.9',
                 'username': 'batman',
                 'use_keys': 'True',
                 }
@@ -211,16 +213,29 @@ class EventBestPathChanged(EventBase):
         net_connect.find_prompt()
         command= "sudo -S <<< 7654321 route -n"
         route_table= net_connect.send_command_timing(command, strip_command= False, strip_prompt= False)
-        
-        if str(path.nlri.addr) in route_table:
-            print("Not adding route for {}".format(path.nlri.addr))
-        
+
+        #Withdrawn. Remove route if present
+        if self.is_withdraw==True:
+            #Delete route if present
+            if str(path.nlri.addr) in route_table:
+                print("Deleting route for {}".format(path.nlri.addr))
+                command="sudo -S <<< 7654321 ip route del {}/32 via 10.10.10.18".format(path.nlri.addr)
+                net_connect.send_command_timing(command, strip_command= False, strip_prompt= False)
+
+            else:
+                print("Route doesn't exist for {}. Not adding".format(path.nlri.addr))
+
+        #Advertised. Add route if not present
         else:
-            print("Adding route for {}".format(path.nlri.addr))
-            command="sudo -S <<< 7654321 ip route add {}/32 via 172.16.3.16".format(path.nlri.addr)
-            net_connect.send_command_timing(command, strip_command= False, strip_prompt= False)
-        
-        
+            if str(path.nlri.addr) in route_table:
+                print("Not adding route for {}".format(path.nlri.addr))
+
+            else:
+                print("Adding route for {}".format(path.nlri.addr))
+                command="sudo -S <<< 7654321 ip route add {}/32 via 10.10.10.18".format(path.nlri.addr)
+                net_connect.send_command_timing(command, strip_command= False, strip_prompt= False)
+
+
 class EventAdjRibInChanged(EventBase):
     """
     Event called when any adj-RIB-in path is changed due to UPDATE messages
@@ -246,6 +261,10 @@ class EventAdjRibInChanged(EventBase):
         self.is_withdraw = is_withdraw
         self.peer_ip = peer_ip
         self.peer_as = peer_as
+        print("###ADJ CHANGED")
+        print("Route Withdrawn?: {}".format(self.is_withdraw))
+        print("Peer IP and AS: {} {}".format(self.peer_ip, self.peer_as))
+        print("Route: {}".format(self.path.nlri.addr))
 
 
 class EventPeerDown(EventBase):
@@ -264,7 +283,9 @@ class EventPeerDown(EventBase):
         super(EventPeerDown, self).__init__()
         self.remote_ip = remote_ip
         self.remote_as = remote_as
-
+        print("####PEER DOWN####")
+        print(self.remote_ip)
+        print(self.remote_as)
 
 class EventPeerUp(EventBase):
     """
@@ -282,6 +303,9 @@ class EventPeerUp(EventBase):
         super(EventPeerUp, self).__init__()
         self.remote_ip = remote_ip
         self.remote_as = remote_as
+        print("####PEER UP####")
+        print(self.remote_ip)
+        print(self.remote_as)
 
 
 class RyuBGPSpeaker(RyuApp):
@@ -323,6 +347,8 @@ class RyuBGPSpeaker(RyuApp):
             # Configure BGP settings, if available.
             if hasattr(settings, 'BGP'):
                 LOG.debug('Loading BGP settings...')
+                print("##")
+                print(settings.BGP)
                 self._start_speaker(settings.BGP)
 
             # Configure SSH settings, if available.
