@@ -4,7 +4,8 @@ from netmiko.ssh_dispatcher import ConnectHandler
 CONTROLLER_IP= "172.16.3.15"
 USERNAME= 'batman'
 PASSWORD= '7654321'
-NETWORK_TRUTH= 'network_truth.csv'
+SDN_NETWORK_TRUTH= 'network_truth.csv'
+TRADITIONAL_NETWORK_TRUTH= 'traditional_network_truth.csv'
 BRIDGE= 'br0'
 connected_ovses= []
 disconnected_ovses= []
@@ -12,14 +13,16 @@ version_match_ovses= []
 version_mismatch_ovses= []
 version_config_ctl= []
 version_misconfig_ctl= []
+misconfigured_routers_info= []
+
 
 '''
 Returns dpid, controller ip and of_version configured on a switch 
 given the mgmt IP of a switch
 '''
 def parse_this_switch(switch_mgmt_ip):
-    if os.path.isfile(NETWORK_TRUTH):
-        with open(NETWORK_TRUTH) as csvfile:
+    if os.path.isfile(SDN_NETWORK_TRUTH):
+        with open(SDN_NETWORK_TRUTH) as csvfile:
             reader=_csv.reader(csvfile)
             
             for row in reader:
@@ -39,14 +42,37 @@ def parse_this_switch(switch_mgmt_ip):
 
 
 '''
+Get BGP configuration info from the router whose IP is input. Remote AS and Remote IP
+'''
+def get_bgp_config(router_ip):
+
+    if os.path.isfile(TRADITIONAL_NETWORK_TRUTH):
+        with open(TRADITIONAL_NETWORK_TRUTH) as csvfile:
+            reader=_csv.reader(csvfile)
+            
+            for row in reader:    
+                    if row[0]==router_ip:
+                        '''This function call
+                        shall have remote_as,remote_bgp_ip to catch returned
+                        values
+                        '''
+                        return(row[2], row[3])
+                                 
+    else:
+        ######Replace print with log later
+        print("Please add traditional network truth csv file immediately")
+        return(None, None)
+ 
+ 
+'''
 Returns list of mgmt IPs of all switches
 as reflected in csv file
 '''
 def get_my_switches():
     my_switch_mgmt_ips= []
 
-    if os.path.isfile(NETWORK_TRUTH):
-        with open(NETWORK_TRUTH) as csvfile:
+    if os.path.isfile(SDN_NETWORK_TRUTH):
+        with open(SDN_NETWORK_TRUTH) as csvfile:
             reader=_csv.reader(csvfile)
 
             for row in reader:
@@ -59,6 +85,29 @@ def get_my_switches():
     else:
         ######Replace print with log later
         print("Please add network truth csv file immediately")
+        return(None)   
+    
+'''
+Returns list of mgmt IPs of all routers
+as reflected in traditional network truth
+'''
+def get_my_routers():
+    my_router_ips= []
+    if os.path.isfile(TRADITIONAL_NETWORK_TRUTH):
+        with open(TRADITIONAL_NETWORK_TRUTH) as csvfile:
+            reader=_csv.reader(csvfile)
+            
+            for row in reader:    
+                if row[0]!= "Device":
+                    my_router_ips.append(row[0])
+                
+                return(my_router_ips)
+                csvfile.close()    
+
+                                                
+    else:
+        ######Replace print with log later
+        print("Please add traditional network truth csv file immediately")
         return(None)
 
 
@@ -135,6 +184,59 @@ class Check_Ctl_Misconfig(threading.Thread):
             version_misconfig_ctl.append(self.ip)
 
 
+class Check_BGP_Misconfig(threading.Thread):
+    def __init__(self, net_device):
+        threading.Thread.__init__(self)
+        self.net_device= net_device
+        
+        
+    def run(self):
+        global misconfigured_routers_info
+        #true remote ip is controller
+        self.true_remote_as, self.true_remote_ip= get_bgp_config(self.net_device['ip'])
+        
+        
+        self.net_connect= ConnectHandler(**self.net_device)
+        #Assuming one neighbor
+        self.neighbor_line= self.net_connect.send_command_timing("sh run | include neighbor | exclude bgp",
+                                                                 strip_command= False, strip_prompt= False)
+        self.neighbor_line_list= self.neighbor_line.split()
+        
+        self.bgp_line= self.net_connect.send_command_timing("sh run | include router bgp",
+                                                                 strip_command= False, strip_prompt= False)
+        
+        self.bgp_line_list= self.bgp_line.split()
+        
+        self.local_as= self.bgp_line_list[2]
+        
+        if len(self.neighbor_line_list)!= 0:
+            #Check for misconfiguration
+            configured_remote_as= self.neighbor_line_list[3]
+            configured_remote_ip= self.neighbor_line_list[1]
+            
+            if self.true_remote_as== configured_remote_as and configured_remote_ip== self.true_remote_ip:
+                pass
+            
+            else:
+                misconfigured_routers_info.append({
+                    'router_ip': self.net_device['ip'],
+                    'local_as': self.local_as,
+                    'misconfigured_line': self.bgp_line,
+                    'true_remote_as': self.true_remote_as,
+                    'true_remote_ip': self.true_remote_ip})
+            
+            
+        #Neighbor not configured at all. Configure now    
+        else:
+            misconfigured_routers_info.append({
+                'router_ip': self.net_device,
+                'local_as': self.local_as,
+                'misconfigured_line': None,
+                'true_remote_as': self.true_remote_as,
+                'true_remote_ip': self.true_remote_ip})        
+        
+        
+        
 class Resolve_Ver_Mismatch(threading.Thread):
     def __init__(self, net_device, true_of_version):
         threading.Thread.__init__(self)
@@ -177,6 +279,29 @@ class Resolve_Ctl_Misconfig(threading.Thread):
         output= self.net_connect.send_command_timing(command, 
                                                      strip_command= False, strip_prompt= False)
 
+
+
+
+class Resolve_BGP_Misconfig(threading.Thread):
+    def __init__(self, net_device, misconfigured_routers_info):
+        threading.Thread.__init__(self)
+        self.net_device= net_device
+        self.misconfigured_routers_info= misconfigured_routers_info
+
+    def run(self):
+        self.config_set= []
+        self.net_connect= ConnectHandler(**self.net_device)
+        self.local_as= misconfigured_routers_info['local_as']
+        self.misconfigured_line= self.misconfigured_routers_info['misconfigured_line']
+        self.true_remote_as= self.misconfigured_routers_info['true_remote_as']
+        self.true_remote_ip= self.misconfigured_routers_info['true_remote_ip']
+        
+        self.config_set.append('router bgp {}'.format(self.local_as))
+        if self.misconfigured_line!= None:
+            self.config_set.append('no {}'.format(self.misconfigured_line))
+            
+        self.config_set.append('neighbor {} remote-as {}'.format(self.true_remote_ip, self.true_remote_as))
+        self.net_connect.send_config_set()
 
 class Detect_Issues():
     def __init__(self):
@@ -267,6 +392,33 @@ class Detect_Issues():
         version_misconfig_ctl= []
         return(version_config_ctl1, version_misconfig_ctl1)
         
+    
+    #Calls threads to check misconfiguration on CISCO router    
+    def detect_bgp_misconfig(self, my_routers):
+        global misconfigured_routers_info
+        
+        #misconfigured_routers= [], correct_remote_ases= [], correct_remote_ips= []
+        self.my_routers= my_routers
+      
+        threads= []
+        
+        for router_ip in self.my_routers:
+            net_device={
+                'device_type':'cisco_ios',
+                'ip': router_ip,
+                'username': USERNAME,
+                'password': '7654321',
+                }  
+
+            thr_check_bgp_misconfig= Check_BGP_Misconfig(net_device)
+            thr_check_bgp_misconfig.daemon= True
+            thr_check_bgp_misconfig.start()
+            threads.append(thr_check_bgp_misconfig)
+            
+        for element in threads:
+            element.join()
+             
+        return(misconfigured_routers_info)
 
 
 class Resolve_Issues():
@@ -325,8 +477,30 @@ class Resolve_Issues():
             element.join()
 
 
-
-
+    #Takes misconfigured_routers_info as argument and resolves BGP misconfiguration
+    def resolve_bgp_misconfig(self, misconfigured_routers_info): 
+        self.misconfigured_routers_info= misconfigured_routers_info
+        
+        threads= []
+        
+        for router in misconfigured_routers_info:
+            #Device to login to
+            self.net_device={
+                'device_type':'cisco_ios',
+                'ip': router['router_ip'],
+                'username': USERNAME,
+                'password': '7654321',
+                } 
+            
+            thr_resolve_bgp_misconfig= Resolve_BGP_Misconfig(self.net_device, misconfigured_routers_info)
+            thr_resolve_bgp_misconfig.daemon= True
+            thr_resolve_bgp_misconfig.start()
+            threads.append(thr_resolve_bgp_misconfig)
+        
+        for element in threads:
+            element.join()
+        
+    
 #UNIT TESTS
 while True:
     print("\n\n")
@@ -389,13 +563,68 @@ while True:
                 break            
 
             else:
-                print("No ctl misconfig detected. Moving on to next step")
-                break
+                print("\n\n")
+                print("*"*50)
+                print("STEP 4")
+                print("No controller misconfiguration detected. Checking BGP misconfiguration")
+                my_routers= get_my_routers()    
+                #Detect misconfigured routers
+                obj3= Detect_Issues()
+                misconfigured_routers_info= obj3.detect_bgp_misconfig(my_routers)
+                
+                if len(misconfigured_routers_info)!= 0:
+                    #Resolve misconfigured routers
+                    print("BGP misconfiguration detected. Attempting to resolve... Waiting for 5s")
+                    obj4= Resolve_Issues()
+                    obj4.resolve_bgp_misconfig(misconfigured_routers_info) 
+                    misconfigured_routers_info= []
+                    time.sleep(5)
+                    print("Resolved BGP misconfiguration.")
+                    print("\n\n")
+                    print("*"*50)
+                    print("END OF SELF_HEALING. If not resolved, check self.heal.log for detailed info.")
+                    print("*"*50)
+                    break
             
         else:
-            print("All OVSes are connected to controller")
-            break
+            print("All OVSes are connected to controller. Checking BGP misconfiguration")
+            my_routers= get_my_routers()
+            #Detect misconfigured routers
+            obj3= Detect_Issues()
+            misconfigured_routers_info= obj3.detect_bgp_misconfig(my_routers)
+            
+            if len(misconfigured_routers_info)!= 0:
+                #Resolve misconfigured routers
+                print("BGP misconfiguration detected. Attempting to resolve... Waiting for 5s")
+                obj4= Resolve_Issues()
+                obj4.resolve_bgp_misconfig(misconfigured_routers_info) 
+                misconfigured_routers_info= []
+                time.sleep(5)
+                print("Resolved BGP misconfiguration.")
+                print("\n\n")
+                print("*"*50)
+                print("END OF SELF_HEALING. If not resolved, check self.heal.log for detailed info.")
+                print("*"*50)
+                break
+
             
     else:
-        print("All OVSes are connected to controller")
-        break
+        print("All OVSes are connected to controller. Checking BGP misconfiguration")
+        my_routers= get_my_routers()
+        #Detect misconfigured routers
+        obj3= Detect_Issues()
+        misconfigured_routers_info= obj3.detect_bgp_misconfig(my_routers)
+        
+        if len(misconfigured_routers_info)!= 0:
+            #Resolve misconfigured routers
+            print("BGP misconfiguration detected. Attempting to resolve... Waiting for 5s")
+            obj4= Resolve_Issues()
+            obj4.resolve_bgp_misconfig(misconfigured_routers_info) 
+            misconfigured_routers_info= []
+            time.sleep(5)
+            print("Resolved BGP misconfiguration.")
+            print("\n\n")
+            print("*"*50)
+            print("END OF SELF_HEALING. If not resolved, check self.heal.log for detailed info.")
+            print("*"*50)
+            break
