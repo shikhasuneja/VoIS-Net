@@ -1,4 +1,3 @@
-
 from __future__ import absolute_import
 
 import os
@@ -69,7 +68,7 @@ BGP = {
     # - BGPSpeaker.prefix_add()
     # - BGPSpeaker.evpn_prefix_add()
     # - BGPSpeaker.flowspec_prefix_add()
-    
+
 }
 
 
