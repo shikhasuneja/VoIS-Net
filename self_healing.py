@@ -503,7 +503,6 @@ class Resolve_Issues():
     
 #UNIT TESTS
 while True:
-    print("\n\n")
     print("*"*50)
     print("STEP 1")
     #Get Disconnected switches list    
@@ -515,7 +514,6 @@ while True:
     print(disconnected_ovses)
     
     if len(disconnected_ovses)!= 0:
-        print("\n\n")
         print("*"*50)
         print("STEP 2")
         
@@ -547,7 +545,6 @@ while True:
         
         
         if len(disconnected_ovses)!= 0:
-            print("\n\n")
             print("*"*50)
             print("STEP 3")
             version_config_ctl, version_misconfig_ctl= obj1.check_ctl_misconfig(disconnected_ovses)
@@ -560,38 +557,22 @@ while True:
                 obj2.resolve_ctl_misconfig(version_misconfig_ctl)
                 print("Attempted fixing controller config. Waiting for 10s...")
                 time.sleep(10)
-                break            
+                            
 
-            else:
-                print("\n\n")
-                print("*"*50)
-                print("STEP 4")
-                print("No controller misconfiguration detected. Checking BGP misconfiguration")
-                my_routers= get_my_routers()    
-                #Detect misconfigured routers
-                obj3= Detect_Issues()
-                misconfigured_routers_info= obj3.detect_bgp_misconfig(my_routers)
-                
-                if len(misconfigured_routers_info)!= 0:
-                    #Resolve misconfigured routers
-                    print("BGP misconfiguration detected. Attempting to resolve... Waiting for 5s")
-                    obj4= Resolve_Issues()
-                    obj4.resolve_bgp_misconfig(misconfigured_routers_info) 
-                    misconfigured_routers_info= []
-                    time.sleep(5)
-                    print("Resolved BGP misconfiguration.")
-                    print("\n\n")
-                    print("*"*50)
-                    print("END OF SELF_HEALING. If not resolved, check self.heal.log for detailed info.")
-                    print("*"*50)
-                    break
+
+            print("\n\n")
+            print("*"*50)
+            print("STEP 4")
+            print("Checking BGP misconfiguration")
             
-        else:
-            print("All OVSes are connected to controller. Checking BGP misconfiguration")
-            my_routers= get_my_routers()
+            
+            my_routers= get_my_routers()    
             #Detect misconfigured routers
             obj3= Detect_Issues()
             misconfigured_routers_info= obj3.detect_bgp_misconfig(my_routers)
+            print("Misconfigured BGP routers:")
+            for i in range(0,len(misconfigured_routers_info)):
+                print(misconfigured_routers_info[i]['router_ip'])
             
             if len(misconfigured_routers_info)!= 0:
                 #Resolve misconfigured routers
@@ -603,21 +584,51 @@ while True:
                 print("Resolved BGP misconfiguration.")
                 print("\n\n")
                 print("*"*50)
-                print("END OF SELF_HEALING. If not resolved, check self.heal.log for detailed info.")
+                print("END OF SELF_HEALING. If not resolved after 30s, check bgp_self_healing.log")
+                print("*"*50)
+                break
+            
+        else:
+            print("All OVSes are connected to controller. Checking BGP misconfiguration")
+            print("*"*50)
+            print("STEP 3")
+            my_routers= get_my_routers()
+            #Detect misconfigured routers
+            obj3= Detect_Issues()
+            misconfigured_routers_info= obj3.detect_bgp_misconfig(my_routers)
+            print("Misconfigured BGP routers:")
+            for i in range(0,len(misconfigured_routers_info)):
+                print(misconfigured_routers_info[i]['router_ip'])    
+    
+            
+            if len(misconfigured_routers_info)!= 0:
+                #Resolve misconfigured routers
+                print("BGP misconfiguration detected. Attempting to resolve... Waiting for 5s")
+                obj4= Resolve_Issues()
+                obj4.resolve_bgp_misconfig(misconfigured_routers_info) 
+                misconfigured_routers_info= []
+                time.sleep(5)
+                print("Resolved BGP misconfiguration.")
+                print("\n\n")
+                print("*"*50)
+                print("END OF SELF_HEALING. If not resolved after 30s, check bgp_self_healing.log")
                 print("*"*50)
                 break
 
             
     else:
         print("All OVSes are connected to controller. Checking BGP misconfiguration")
+        print("\n\n")
+        print("*"*50)
+        print("STEP 2")        
         my_routers= get_my_routers()
         #Detect misconfigured routers
-        print(my_routers)
         obj3= Detect_Issues()
         misconfigured_routers_info= obj3.detect_bgp_misconfig(my_routers)
-        print("Misconfigd routers")
-        print(misconfigured_routers_info)
-        
+        print("Misconfigured BGP routers:")
+        for i in range(0,len(misconfigured_routers_info)):
+            print(misconfigured_routers_info[i]['router_ip'])
+
         if len(misconfigured_routers_info)!= 0:
             #Resolve misconfigured routers
             print("BGP misconfiguration detected. Attempting to resolve... Waiting for 5s")
@@ -628,7 +639,7 @@ while True:
             print("Resolved BGP misconfiguration.")
             print("\n\n")
             print("*"*50)
-            print("END OF SELF_HEALING. If not resolved, check self.heal.log for detailed info.")
+            print("END OF SELF_HEALING. If not resolved after 30s, check bgp_self_healing.log")
             print("*"*50)
         
             break
