@@ -220,7 +220,7 @@ class Check_BGP_Misconfig(threading.Thread):
                 misconfigured_routers_info.append({
                     'router_ip': self.net_device['ip'],
                     'local_as': self.local_as,
-                    'misconfigured_line': self.bgp_line,
+                    'misconfigured_line': self.neighbor_line,
                     'true_remote_as': self.true_remote_as,
                     'true_remote_ip': self.true_remote_ip})
             
