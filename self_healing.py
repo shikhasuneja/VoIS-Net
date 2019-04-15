@@ -206,7 +206,9 @@ class Check_BGP_Misconfig(threading.Thread):
         
         self.bgp_line_list= self.bgp_line.split()
         
-        self.local_as= self.bgp_line_list[2]
+        self.local_as= self.bgp_line_list[8]
+        self.neighbor_line= self.neighbor_line.split('bgp\n ')[-1]
+        self.neighbor_line= self.neighbor_line.split('\n')[0]
         
         if len(self.neighbor_line_list)!= 0:
             #Check for misconfiguration
@@ -302,7 +304,8 @@ class Resolve_BGP_Misconfig(threading.Thread):
             
         self.config_set.append('neighbor {} remote-as {}'.format(self.true_remote_ip, self.true_remote_as))
         self.net_connect.send_config_set(self.config_set)
-
+        #print(self.config_set)
+        
 class Detect_Issues():
     def __init__(self):
         pass
