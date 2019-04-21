@@ -1,4 +1,4 @@
-# VoISNet
+# VoIS-Net: An SDN-driven, Voice-assisted, Intent-based,  Self-healing Network Framework
 
 This project implements a robust, intent-based, self-healing framework to improve network administration, management and troubleshooting using SDN programmability.
 
