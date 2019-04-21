@@ -36,6 +36,6 @@ def attack_ctrl(ctrl_ip, ctrl_port):
 
 if __name__ == "__main__":
         ctrl_ip, ctrl_port = get_ctrl_details()
-        #print("The controller's ip is {} and the port is {}.".format(ctrl_ip, ctrl_port))
-        #attack_ctrl(ctrl_ip, ctrl_port)
+        print("The controller's ip is {} and the port is {}.".format(ctrl_ip, ctrl_port))
+        attack_ctrl(ctrl_ip, ctrl_port)
 
