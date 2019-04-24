@@ -185,10 +185,10 @@ class Topo_Discovery(app_manager.RyuApp):
         if eth.ethertype==34525:
             return
         
-        f=open('log.txt','w')
-        f.write("False host packet in\n")
-        f.write(eth)
-        f.close()
+        #f=open('log.txt','w')
+        #f.write("False host packet in\n")
+        #f.write(eth)
+        #f.close()
         #Add host mapping if not present
         if src not in self.host_macs.values():
             self.host_macs[dpid]= src

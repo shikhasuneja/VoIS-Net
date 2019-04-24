@@ -1,0 +1,93 @@
+* {
+box-sizing: border-box;
+}
+ 
+*:focus {
+	outline: none;
+}
+body {
+font-family: Arial;
+background-color: #87ceeb;
+padding: 20px;
+}
+.login {
+margin: 5px auto;
+width: 400px;
+text-align: center;
+}
+.bandwidth {
+margin: 20px auto;
+width: 800px;
+}
+.login-screen {
+background-color: #FFF;
+padding: 10px;
+border-radius: 5px
+}
+ 
+.app-title {
+text-align: center;
+color: #777;
+}
+ 
+.login-form {
+text-align: center;
+}
+.control-group {
+margin-bottom: 10px;
+}
+
+input {
+text-align: center;
+background-color: #68447E;
+border: 2px solid transparent;
+border-radius: 3px;
+font-size: 14px;
+font-weight: 200;
+padding: 10px 0;
+width: 400px;
+transition: border .5s;
+}
+ 
+input:focus {
+border: 2px solid #68447E;
+box-shadow: none;
+}
+ 
+.btn {
+  border: 2px solid transparent;
+  background: #68447E;
+  color: #ffffff;
+  font-size: 16px;
+  line-height: 25px;
+  padding: 10px 0;
+  text-decoration: none;
+  text-shadow: none;
+  border-radius: 3px;
+  box-shadow: none;
+  transition: 0.25s;
+  display: block;
+  width: 250px;
+  margin: 0 auto;
+}
+
+.btn:hover {
+  background-color: #68447E;
+}
+ 
+.login-link {
+  font-size: 12px;
+  color: #444;
+  display: inline-block;
+	margin-top: 5px;
+}    
+.image{
+  width: 60vw;
+  min-width: 360px;
+  text-align: center;
+  margin: 3% auto;
+  background-color: #87ceeb;
+  max-height: 20px;
+  height: 50%;
+}
+

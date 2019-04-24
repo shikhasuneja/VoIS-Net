@@ -1,4 +1,3 @@
-
 """
     Team VoIS-Network
     Date: 01/28/2019
@@ -145,12 +144,13 @@ def draw_labels(G, links):
     dst_ports = get_edge_labels(links, 'dst_port')
     set_edge_labels(G, pos, dst_ports, 0.8)
 
-def draw_topology(switches, links, hosts, hosts_switches_links):
+def draw_topology(switches, links, hosts, hosts_switches_links, cli):
     """ Function to draw the network topology
         args:
             switches: list of switches in the topology
             links: list of links in the topology
             hosts: list of hosts in the topology
+            cli: argument to imply if the visualization is CLI-based or not
     """
 
     G = nx.MultiGraph()
@@ -161,23 +161,15 @@ def draw_topology(switches, links, hosts, hosts_switches_links):
     plt.axis('off')
     plt.savefig(TOPOLOGY_IMAGE)
     print("Saved the network topology as {}".format(TOPOLOGY_IMAGE))
-    #plt.show()
-    return
+    if not cli:
+        plt.clf()
 
+def visualize_topology(cli = False):
+    """ Function to fetch information and visualize the network topology
+        args:
+            cli: argument to imply if the visualization is CLI-based or not
+    """
 
-def visualize_topology():
     switches, links, hosts, hosts_switches_links = get_topo_details()
     if switches or links or hosts:
-        draw_topology(switches, links, hosts, hosts_switches_links)
-
-    return
-
-'''
-if __name__ == "__main__":
-    switches, links, hosts, hosts_switches_links = get_topo_details()
-    if switches or links or hosts:
-        draw_topology(switches, links, hosts, hosts_switches_links)
-        
-'''        
-        
-
+        draw_topology(switches, links, hosts, hosts_switches_links, cli)

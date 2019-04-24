@@ -1,0 +1,2 @@
+Device,Local AS,Remote AS,Remote BGP IP
+172.16.3.16,65002,65001,172.16.3.15
